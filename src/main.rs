@@ -1,5 +1,6 @@
 mod agent;
 mod app;
+mod audio_analysis;
 mod config;
 mod downloader;
 mod library;
@@ -21,7 +22,7 @@ use crossterm::terminal::{
 };
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use app::{AgentStatus, AppState, FocusedPanel, InputMode, NowPlaying, PlayerCommand, Song, SongStatus};
 use config::Config;
@@ -112,17 +113,23 @@ async fn run_app(
     player.set_volume(config.default_volume);
     info!(volume = config.default_volume, "player initialized");
 
-    let app_start = Instant::now();
-    let tick_rate = Duration::from_millis(50);
+    let tick_rate = Duration::from_millis(16); // ~60fps for smooth wave
 
     loop {
-        // Update visualizer
+        // Update audio features and matrix rain
         {
+            let audio_features = player.get_audio_features();
             let mut s = state.lock().unwrap();
-            let is_playing = s.current.is_some() && !s.paused;
-            let time = app_start.elapsed().as_secs_f64();
-            s.visualizer_data =
-                ui::visualizer::generate_visualizer_data(60, time, is_playing);
+            s.audio_features = audio_features;
+
+            if s.current.is_some() {
+                let size = terminal.size().unwrap_or_default();
+                // Approximate visualizer inner area (65% width, minus borders)
+                let vis_width = ((size.width as f32 * 0.65) as usize).saturating_sub(2);
+                let vis_height = size.height.saturating_sub(8) as usize; // minus input, now_playing, status
+                s.matrix_rain.resize(vis_width.max(1), vis_height.max(1));
+                s.matrix_rain.update(&audio_features);
+            }
         }
 
         // Update playback position from player

@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use crate::audio_analysis::AudioFeatures;
+use crate::ui::visualizer::MatrixRain;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum SongStatus {
     Queued,
@@ -152,7 +155,8 @@ pub struct AppState {
     pub agent_status: AgentStatus,
     pub volume: u8,
     pub paused: bool,
-    pub visualizer_data: Vec<f32>,
+    pub audio_features: AudioFeatures,
+    pub matrix_rain: MatrixRain,
     pub should_quit: bool,
     pub pending_commands: Vec<PlayerCommand>,
     /// Status message shown in the visualizer area (buffering, errors, etc.)
@@ -175,7 +179,8 @@ impl AppState {
             agent_status: AgentStatus::Idle,
             volume: 70,
             paused: false,
-            visualizer_data: vec![0.0; 40],
+            audio_features: AudioFeatures::default(),
+            matrix_rain: MatrixRain::new(80, 24),
             should_quit: false,
             pending_commands: Vec::new(),
             status_message: None,

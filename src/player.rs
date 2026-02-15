@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink};
+use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
@@ -7,11 +7,14 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing::{info, warn};
 
+use crate::audio_analysis::{self, AudioAnalyzer, AudioFeatures};
+
 pub struct Player {
     _stream: OutputStream,
     _stream_handle: OutputStreamHandle,
     sink: Arc<Sink>,
     pub duration: Option<Duration>,
+    analyzer: Option<AudioAnalyzer>,
 }
 
 impl Player {
@@ -27,6 +30,7 @@ impl Player {
             _stream_handle: stream_handle,
             sink,
             duration: None,
+            analyzer: None,
         })
     }
 
@@ -45,10 +49,26 @@ impl Player {
         let file = BufReader::new(File::open(path).context("Failed to open audio file")?);
         let source = Decoder::new(file).context("Failed to decode audio file")?;
 
-        self.sink.append(source);
+        let channels = source.channels();
+        let sample_rate = source.sample_rate();
+
+        // Create shared buffer and wrap source with AnalyzingSource
+        let buffer = audio_analysis::new_shared_buffer();
+        let analyzing_source =
+            audio_analysis::AnalyzingSource::new(source.convert_samples::<f32>(), buffer.clone(), channels, sample_rate);
+
+        self.analyzer = Some(AudioAnalyzer::new(buffer, sample_rate));
+        self.sink.append(analyzing_source);
         self.duration = duration_secs.map(|s| Duration::from_secs_f64(s));
 
         Ok(())
+    }
+
+    pub fn get_audio_features(&mut self) -> AudioFeatures {
+        match self.analyzer {
+            Some(ref mut a) => a.analyze(),
+            None => AudioFeatures::default(),
+        }
     }
 
     pub fn pause(&self) {
