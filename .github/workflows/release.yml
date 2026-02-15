@@ -7,36 +7,24 @@ on:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        include:
-          - target: aarch64-apple-darwin
-            os: macos-latest
-          - target: x86_64-apple-darwin
-            os: macos-13
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
 
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release
 
       - name: Package
-        run: |
-          cd target/${{ matrix.target }}/release
-          tar czf ../../../vibeplayer-${{ matrix.target }}.tar.gz vibeplayer
-          cd ../../..
+        run: tar czf vibeplayer-aarch64-apple-darwin.tar.gz -C target/release vibeplayer
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vibeplayer-${{ matrix.target }}
-          path: vibeplayer-${{ matrix.target }}.tar.gz
+          name: vibeplayer-aarch64-apple-darwin
+          path: vibeplayer-aarch64-apple-darwin.tar.gz
 
   release:
     needs: build
@@ -54,26 +42,21 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            vibeplayer-aarch64-apple-darwin/vibeplayer-aarch64-apple-darwin.tar.gz
-            vibeplayer-x86_64-apple-darwin/vibeplayer-x86_64-apple-darwin.tar.gz
+          files: vibeplayer-aarch64-apple-darwin/vibeplayer-aarch64-apple-darwin.tar.gz
           generate_release_notes: true
 
       - name: Compute SHA256
         id: sha
         run: |
-          ARM_SHA=$(sha256sum vibeplayer-aarch64-apple-darwin/vibeplayer-aarch64-apple-darwin.tar.gz | cut -d' ' -f1)
-          INTEL_SHA=$(sha256sum vibeplayer-x86_64-apple-darwin/vibeplayer-x86_64-apple-darwin.tar.gz | cut -d' ' -f1)
-          echo "ARM_SHA=$ARM_SHA" >> $GITHUB_OUTPUT
-          echo "INTEL_SHA=$INTEL_SHA" >> $GITHUB_OUTPUT
+          SHA=$(sha256sum vibeplayer-aarch64-apple-darwin/vibeplayer-aarch64-apple-darwin.tar.gz | cut -d' ' -f1)
+          echo "SHA=$SHA" >> $GITHUB_OUTPUT
 
       - name: Update Homebrew formula
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
-          ARM_SHA=${{ steps.sha.outputs.ARM_SHA }}
-          INTEL_SHA=${{ steps.sha.outputs.INTEL_SHA }}
+          SHA=${{ steps.sha.outputs.SHA }}
 
           git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/Patrik-Stas/homebrew-vibeplayer.git tap
           mkdir -p tap/Formula
@@ -85,13 +68,8 @@ jobs:
             version "${VERSION}"
             license "MIT"
 
-            if Hardware::CPU.arm?
-              url "https://github.com/Patrik-Stas/vibeplayer/releases/download/v${VERSION}/vibeplayer-aarch64-apple-darwin.tar.gz"
-              sha256 "${ARM_SHA}"
-            else
-              url "https://github.com/Patrik-Stas/vibeplayer/releases/download/v${VERSION}/vibeplayer-x86_64-apple-darwin.tar.gz"
-              sha256 "${INTEL_SHA}"
-            end
+            url "https://github.com/Patrik-Stas/vibeplayer/releases/download/v${VERSION}/vibeplayer-aarch64-apple-darwin.tar.gz"
+            sha256 "${SHA}"
 
             def install
               bin.install "vibeplayer"
